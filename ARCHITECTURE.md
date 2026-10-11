@@ -290,10 +290,12 @@ loads async). The view keys the track-change art animation on this, not the titl
 so the flip fires when the new image is ready rather than showing the old art
 flipping in and then blinking to the new one.
 
-- `start()` picks the streaming helper if available, else the 1s poll timer. A
-  separate 0.5s `tickTimer` advances `elapsed` locally between real updates so the
-  scrubber is smooth.
-- `apply(info)` updates fields, decides the pause-linger (§7), and loads artwork:
+- `start()` picks the streaming helper if available, else the 1s poll timer.
+  (There used to be a 0.5 s `tickTimer` advancing `elapsed` for a scrubber; nothing
+  shows `elapsed` anymore, and it re-rendered the island twice a second, so it's gone.)
+- `apply(info)` updates fields — through `setIfChanged`, since `@Published` announces
+  every assignment and each one re-renders the island — decides the pause-linger
+  (§7), and loads artwork:
   embedded image → use directly; `artworkURL` (Spotify) → fetch once per track;
   `sourceApp == "system"` → `loadSystemArtwork` via the helper, keyed on
   `title|album` so it isn't refetched every tick.

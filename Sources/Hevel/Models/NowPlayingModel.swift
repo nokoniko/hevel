@@ -2,8 +2,8 @@ import SwiftUI
 import Combine
 
 /// Observable state for the island. Pulls now-playing info from MediaRemote
-/// (with an AppleScript fallback), keeps the elapsed time ticking locally so the
-/// scrubber moves smoothly.
+/// (with an AppleScript fallback). Properties are only assigned when they change,
+/// since every assignment re-renders the island.
 @MainActor
 final class NowPlayingModel: ObservableObject {
 
@@ -32,8 +32,6 @@ final class NowPlayingModel: ObservableObject {
     @Published var accent: Color = .white
 
     private var pollTimer: Timer?
-    private var tickTimer: Timer?
-    private var lastUpdate = Date()
     private var lastArtworkKey: String?
     private var currentSource: String?
     private var pauseLingerWork: DispatchWorkItem?
@@ -146,24 +144,11 @@ final class NowPlayingModel: ObservableObject {
                 }
             }
         }
-
-        // Local clock: advance elapsed between real updates so the UI is smooth.
-        tickTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
-        }
     }
 
     func stop() {
         SystemNowPlaying.shared.stop()
         pollTimer?.invalidate()
-        tickTimer?.invalidate()
-    }
-
-    private func tick() {
-        guard isPlaying, duration > 0 else { return }
-        let now = Date()
-        elapsed = min(elapsed + now.timeIntervalSince(lastUpdate), duration)
-        lastUpdate = now
     }
 
     /// Handle one streamed system snapshot (called off the main thread).
@@ -248,18 +233,17 @@ final class NowPlayingModel: ObservableObject {
         // current one, the user went back (flip left); otherwise forward (right).
         if trackChanged {
             let newKey = newTitle + "|" + (info.album ?? "")
-            flipForward = (newKey != trackKeyPrevious)
+            setIfChanged(\.flipForward, newKey != trackKeyPrevious)
             trackKeyPrevious = trackKeyCurrent
             trackKeyCurrent = newKey
         }
 
-        title = newTitle
-        artist = info.artist ?? ""
-        album = info.album ?? ""
-        if let d = info.duration { duration = d }
-        if let e = info.elapsed { elapsed = e }
-        if let p = info.isPlaying { isPlaying = p }
-        lastUpdate = Date()
+        setIfChanged(\.title, newTitle)
+        setIfChanged(\.artist, info.artist ?? "")
+        setIfChanged(\.album, info.album ?? "")
+        if let d = info.duration { setIfChanged(\.duration, d) }
+        if let e = info.elapsed { setIfChanged(\.elapsed, e) }
+        if let p = info.isPlaying { setIfChanged(\.isPlaying, p) }
 
         switch Self.pauseLinger(wasPlaying: wasPlaying, isPlaying: isPlaying,
                                 title: newTitle, source: info.sourceApp) {
@@ -270,8 +254,8 @@ final class NowPlayingModel: ObservableObject {
 
         if let art = info.artwork {
             if trackChanged || artwork == nil {
-                artwork = art
-                accent = Self.accentColor(from: art)
+                setIfChanged(\.artwork, art)
+                setIfChanged(\.accent, Self.accentColor(from: art))
             }
         } else if let urlString = info.artworkURL {
             // Fallback source (Spotify): fetch the cover image by URL, once per track.
@@ -288,14 +272,21 @@ final class NowPlayingModel: ObservableObject {
                 loadSystemArtwork(forToken: newTitle)
             }
         } else if trackChanged {
-            artwork = nil
-            accent = .white
+            setIfChanged(\.artwork, nil)
+            setIfChanged(\.accent, .white)
             lastArtworkKey = nil
         }
 
-        hasMedia = !title.isEmpty || artwork != nil
+        setIfChanged(\.hasMedia, !title.isEmpty || artwork != nil)
         currentSource = info.sourceApp
-        playingPID = info.pid
+        setIfChanged(\.playingPID, info.pid)
+    }
+
+    /// `@Published` announces every assignment, even of the same value, and each one
+    /// re-renders the island — so only assign what actually changed.
+    private func setIfChanged<Value: Equatable>(_ property: ReferenceWritableKeyPath<NowPlayingModel, Value>,
+                                                _ value: Value) {
+        if self[keyPath: property] != value { self[keyPath: property] = value }
     }
 
     private func clear() {

@@ -3,7 +3,7 @@ import AppKit
 // Playback controls (play/pause, next, previous) — currently unused: the island has
 // no controls, so nothing calls them. Kept here out of the build (`#if false`) in
 // case they come back. Re-enabling needs some `private` members opened up again
-// (`NowPlayingModel.currentSource`/`lastUpdate`, `MediaFallback.sources`/`browsers`/
+// (`NowPlayingModel.currentSource`, `MediaFallback.sources`/`browsers`/
 // `isRunning`, `SystemNowPlaying.runPythonOnce`/`pyString`) and `mr_command` restored
 // in Helpers/mrhelper.c (below). NSAppleScript isn't thread-safe: if re-enabled, every
 // AppleScript call here must run on `NowPlayingModel.fallbackQueue`, like the
@@ -17,7 +17,6 @@ extension NowPlayingModel {
     func togglePlayPause() {
         control(appleScript: "playpause", mediaKey: .playPause)
         isPlaying.toggle()          // optimistic; the stream corrects it within ~1s
-        lastUpdate = Date()
     }
 
     func next() {
