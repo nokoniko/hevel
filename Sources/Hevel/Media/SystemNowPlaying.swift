@@ -33,7 +33,9 @@ final class SystemNowPlaying {
         return nil
     }()
 
-    nonisolated static var isAvailable: Bool { dylibPath != nil }
+    /// The helper is bundled and `/usr/bin/python3` is more than a stub (see
+    /// `DeveloperTools`). Runs `xcode-select`, so check it once, not per frame.
+    nonisolated static var isAvailable: Bool { dylibPath != nil && DeveloperTools.isInstalled }
 
     private var streamProcess: Process?
     private var buffer = Data()

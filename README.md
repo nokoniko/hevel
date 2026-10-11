@@ -15,7 +15,7 @@
 2. Drag `Hevel.app` onto **Applications**.
 3. First launch: right-click → **Open** (it isn't notarized, so macOS asks once).
 
-After that it updates itself. Needs macOS 14+, an Apple Silicon Mac, and the Xcode Command Line Tools (`xcode-select --install`).
+After that it updates itself. Needs macOS 14+ and an Apple Silicon Mac. To show what's playing in every app (browsers included) it also needs the Xcode Command Line Tools; Hevel offers to install them if they're missing, and until then shows Spotify and Music only.
 
 if you want to use it for windows go to https://github.com/bisonactual/Nikos-Dynamic-Island/ 
 

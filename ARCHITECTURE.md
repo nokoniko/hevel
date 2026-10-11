@@ -81,6 +81,7 @@ Sources/Hevel/
   Media/
     SystemNowPlaying.swift         persistent python3+dylib streaming helper
     MediaFallback.swift            Spotify/Music + browser via AppleScript
+    DeveloperTools.swift           Command Line Tools check + install prompt
     PowerMonitor.swift             IOKit.ps charging detection
   Unused/
     PlaybackControls.swift         play/pause/next/previous, out of the build (#if false)
@@ -245,13 +246,22 @@ functions set up on `dispatch_get_main_queue()` and call `CFRunLoopRun()`.
   `NowPlayingModel` listens for `com.spotify.client.PlaybackStateChanged` and
   `com.apple.Music.playerInfo` and reconciles with the last stream snapshot.
 - `fetchArtwork()` is a one-off `python3` invocation.
+- Without the Command Line Tools, `/usr/bin/python3` is a stub that fails and
+  pops up macOS's install dialog on every run. So `isAvailable` also asks
+  `DeveloperTools.isInstalled` (`xcode-select -p`, which never prompts, plus a real
+  `python3` in that folder). If it's false the helper is never started: the model
+  polls AppleScript instead, and `DeveloperTools.offerInstall` asks once per launch
+  ("Don't ask again" sticks) whether to run `xcode-select --install`. On yes it
+  checks every 10 s for up to an hour and calls `NowPlayingModel.switchToHelper()`
+  when the tools show up.
 - **RAM lesson:** an earlier design spawned a python3 *per second*. That leaked
   zombie processes and pushed RAM to ~76 MB. The single persistent streamer fixed
   it (~41–46 MB).
 
 ### The AppleScript fallback (MediaFallback.swift)
 Two reasons it exists:
-1. If `python3`/the dylib is unavailable, it's the only source (polled 1/s).
+1. If `python3` (no Command Line Tools) or the dylib is unavailable, it's the only
+   source (polled 1/s).
 2. Even when MediaRemote works, its `GetNowPlayingApplicationIsPlaying` **lags
    ~1.2s** on Spotify pause. Spotify/Music expose instant `player state` via
    AppleScript, so we reconcile (below).

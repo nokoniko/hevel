@@ -23,6 +23,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater.start()
         setupStatusItem()
         buildMenus()
+        // Without the Command Line Tools the model polls Spotify/Music only; offer the
+        // tools after launch settles, and switch to the helper once they're in.
+        if SystemNowPlaying.dylibPath != nil, !SystemNowPlaying.isAvailable {
+            DispatchQueue.main.async { [weak self] in
+                DeveloperTools.offerInstall { self?.model.switchToHelper() }
+            }
+        }
         // Menus are plain AppKit, so rebuild them when the language changes.
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main

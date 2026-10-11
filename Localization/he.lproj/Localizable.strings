@@ -110,3 +110,7 @@
 "Reached while charging" = "הושג בזמן טעינה";
 "Both" = "שניהם";
 "Up: when charging reaches the level. Down: when the battery runs down to it. Both: either way." = "למעלה: כשהטעינה מגיעה לרמה. למטה: כשהסוללה יורדת אליה. שניהם: בשני הכיוונים.";
+"Install the Command Line Tools?" = "להתקין את Command Line Tools?";
+"Hevel needs Apple's Command Line Tools to show what's playing in every app, browsers included. Until then, only Spotify and Music are shown. The download is free and comes from Apple." = "Hevel צריכה את Command Line Tools של Apple כדי להציג מה מתנגן בכל אפליקציה, כולל דפדפנים. עד אז יוצגו רק Spotify ו‑Music. ההורדה בחינם ומגיעה מ‑Apple.";
+"Install" = "התקנה";
+"Don't ask again" = "לא לשאול שוב";

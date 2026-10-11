@@ -114,33 +114,50 @@ final class NowPlayingModel: ObservableObject {
 
     func start() {
         if SystemNowPlaying.isAvailable {
-            // One long-lived helper streams metadata — no per-second process spawning.
-            SystemNowPlaying.shared.start { [weak self] info in
-                self?.handleStreamUpdate(info)
-            }
-            // The stream skips repeated lines (a paused track), so whatever Spotify or
-            // Music change on their own — play/pause, track — is picked up from their
-            // own announcements right away instead of waiting for the next line.
-            for name in ["com.spotify.client.PlaybackStateChanged", "com.apple.Music.playerInfo"] {
-                DistributedNotificationCenter.default().addObserver(
-                    forName: .init(name), object: nil, queue: .main
-                ) { [weak self] _ in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        self.handleStreamUpdate(self.lastSystemInfo)
-                    }
+            startStreaming()
+        } else {
+            startPolling()
+        }
+    }
+
+    /// The Command Line Tools were installed while running: swap AppleScript polling
+    /// for the helper.
+    func switchToHelper() {
+        guard pollTimer != nil, SystemNowPlaying.isAvailable else { return }
+        pollTimer?.invalidate()
+        pollTimer = nil
+        startStreaming()
+    }
+
+    private func startStreaming() {
+        // One long-lived helper streams metadata — no per-second process spawning.
+        SystemNowPlaying.shared.start { [weak self] info in
+            self?.handleStreamUpdate(info)
+        }
+        // The stream skips repeated lines (a paused track), so whatever Spotify or
+        // Music change on their own — play/pause, track — is picked up from their
+        // own announcements right away instead of waiting for the next line.
+        for name in ["com.spotify.client.PlaybackStateChanged", "com.apple.Music.playerInfo"] {
+            DistributedNotificationCenter.default().addObserver(
+                forName: .init(name), object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.handleStreamUpdate(self.lastSystemInfo)
                 }
             }
-        } else {
-            // No helper (e.g. no python3): fall back to polling AppleScript sources.
-            pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                guard let self else { return }
-                self.fallbackQueue.async {
-                    let info = MediaFallback.fetch()
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        self.receive(info)
-                    }
+        }
+    }
+
+    /// No helper (e.g. no Command Line Tools): poll the AppleScript sources instead.
+    private func startPolling() {
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.fallbackQueue.async {
+                let info = MediaFallback.fetch()
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.receive(info)
                 }
             }
         }
