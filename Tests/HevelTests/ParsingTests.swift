@@ -167,3 +167,10 @@ struct StreamRepeatTests {
 		#expect(SystemNowPlaying.shouldDeliver(line, previous: Data(), lastDelivered: .distantPast, now: start))
 	}
 }
+
+struct HelperRelaunchTests {
+	@Test(arguments: [(0, 1.0), (1, 2.0), (2, 4.0), (5, 32.0), (6, 60.0), (7, 60.0), (1_000, 60.0)])
+	func waitsLongerAfterEachFailureUpToAMinute(failures: Int, seconds: Double) {
+		#expect(SystemNowPlaying.relaunchDelay(afterFailures: failures) == seconds)
+	}
+}

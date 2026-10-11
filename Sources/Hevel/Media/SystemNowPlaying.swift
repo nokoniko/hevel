@@ -10,12 +10,17 @@ import AppKit
 /// To stay light on RAM, metadata streams from a **single long-lived** helper
 /// process (one JSON line/second — no per-second process spawning, no zombies).
 /// Artwork is an occasional one-off call.
+///
+/// Main-actor bound: the pipe and termination handlers arrive on background threads
+/// and hop to the main thread before touching any state. The static helpers are
+/// `nonisolated` — artwork is fetched off-main and the parsers are plain functions.
+@MainActor
 final class SystemNowPlaying {
     static let shared = SystemNowPlaying()
     private init() {}
 
     /// Located once: the bundled `mrhelper.dylib`.
-    static let dylibPath: String? = {
+    nonisolated static let dylibPath: String? = {
         let fm = FileManager.default
         if let res = Bundle.main.resourcePath {
             let p = res + "/mrhelper.dylib"
@@ -28,7 +33,7 @@ final class SystemNowPlaying {
         return nil
     }()
 
-    static var isAvailable: Bool { dylibPath != nil }
+    nonisolated static var isAvailable: Bool { dylibPath != nil }
 
     private var streamProcess: Process?
     private var buffer = Data()
@@ -38,12 +43,14 @@ final class SystemNowPlaying {
     /// A paused track repeats the same line every second; such repeats are skipped,
     /// but one still goes through this often, so the model re-checks Spotify/Music now
     /// and then even if MediaRemote misses a change.
-    static let repeatInterval: TimeInterval = 10
+    nonisolated static let repeatInterval: TimeInterval = 10
     private var onUpdate: ((NowPlayingInfo?) -> Void)?
     private var stopped = false
+    /// Helper exits in a row without a line in between; sets the relaunch delay.
+    private var failures = 0
 
-    /// Start streaming now-playing metadata. `onUpdate` is called (off the main
-    /// thread) with each snapshot, or nil when nothing is playing.
+    /// Start streaming now-playing metadata. `onUpdate` is called on the main thread
+    /// with each snapshot, or nil when nothing is playing.
     func start(onUpdate: @escaping (NowPlayingInfo?) -> Void) {
         guard Self.dylibPath != nil else { return }
         self.onUpdate = onUpdate
@@ -65,18 +72,33 @@ final class SystemNowPlaying {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
 
+        // Both handlers run on background threads: read there, then hop to the main
+        // thread (DispatchQueue.main keeps the chunks in order, a Task wouldn't).
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            self?.consume(chunk)
+            DispatchQueue.main.async { [weak self] in self?.consume(chunk) }
         }
         process.terminationHandler = { [weak self] _ in
-            guard let self, !self.stopped else { return }
-            // Respawn if the helper ever dies.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.launch() }
+            DispatchQueue.main.async { [weak self] in self?.helperEnded() }
         }
         do { try process.run() } catch { return }
         streamProcess = process
+    }
+
+    /// Respawn if the helper ever dies — waiting longer after each exit that came
+    /// without a line in between, so a helper that can't start (no Command Line
+    /// Tools, a dylib that won't load) isn't relaunched every second forever.
+    private func helperEnded() {
+        guard !stopped else { return }
+        let delay = Self.relaunchDelay(afterFailures: failures)
+        failures += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.launch() }
+    }
+
+    /// 1 s, doubling with each failure in a row, up to a minute.
+    nonisolated static func relaunchDelay(afterFailures failures: Int) -> TimeInterval {
+        min(pow(2, Double(min(failures, 6))), 60)
     }
 
     private func consume(_ data: Data) {
@@ -84,6 +106,7 @@ final class SystemNowPlaying {
         while let nl = buffer.firstIndex(of: 0x0A) {
             let line = Data(buffer[buffer.startIndex..<nl])
             buffer.removeSubrange(buffer.startIndex...nl)
+            failures = 0   // the helper is working
             let now = Date()
             guard Self.shouldDeliver(line, previous: lastLine, lastDelivered: lastDelivered, now: now) else { continue }
             lastLine = line
@@ -94,14 +117,14 @@ final class SystemNowPlaying {
     }
 
     /// A new line, or the same one again once `repeatInterval` has passed.
-    static func shouldDeliver(_ line: Data, previous: Data, lastDelivered: Date, now: Date) -> Bool {
+    nonisolated static func shouldDeliver(_ line: Data, previous: Data, lastDelivered: Date, now: Date) -> Bool {
         line != previous || now.timeIntervalSince(lastDelivered) >= repeatInterval
     }
 
     // MARK: One-off calls
 
     /// Fetch just the current artwork. Call only when the track changes.
-    static func fetchArtwork() -> NSImage? {
+    nonisolated static func fetchArtwork() -> NSImage? {
         guard let dylib = dylibPath else { return nil }
         let code = "import ctypes; ctypes.CDLL(\(pyString(dylib))).mr_get_artwork()"
         guard let out = runPythonOnce(code)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -111,11 +134,11 @@ final class SystemNowPlaying {
 
     // MARK: Internals
 
-    private static func pyString(_ s: String) -> String {
+    nonisolated private static func pyString(_ s: String) -> String {
         "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
-    private static func runPythonOnce(_ code: String) -> String? {
+    nonisolated private static func runPythonOnce(_ code: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = ["-c", code]
@@ -129,11 +152,11 @@ final class SystemNowPlaying {
     }
 
     /// One JSON line from the stream helper, or nil if it's malformed or nothing is playing.
-    static func parse(line: String) -> NowPlayingInfo? {
+    nonisolated static func parse(line: String) -> NowPlayingInfo? {
         parse(Data(line.utf8))
     }
 
-    static func parse(_ data: Data) -> NowPlayingInfo? {
+    nonisolated static func parse(_ data: Data) -> NowPlayingInfo? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let title = obj["title"] as? String, !title.isEmpty
         else { return nil }

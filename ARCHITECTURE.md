@@ -232,7 +232,12 @@ functions set up on `dispatch_get_main_queue()` and call `CFRunLoopRun()`.
 `SystemNowPlaying` (Swift side):
 - `start(onUpdate:)` spawns **one long-lived** `python3 -c "...mr_stream()"`
   process and parses stdout line-by-line into `Info` (sourceApp = `"system"`).
-  Respawns on unexpected termination. A line identical to the previous one (a
+  Respawns on unexpected termination, waiting 1 s, doubling after each exit with no
+  line in between, up to 60 s (`relaunchDelay`) — so a helper that can't start
+  (no Command Line Tools, a dylib that won't load) isn't relaunched every second.
+  The class is `@MainActor`: the pipe and termination handlers run on background
+  threads and hop to the main thread (`DispatchQueue.main`, which keeps chunks in
+  order) before touching state. A line identical to the previous one (a
   paused track, every second) is skipped, except once per `repeatInterval` (10 s)
   — each delivered line makes the model run the Spotify/Music AppleScript
   reconcile, so this is what keeps a paused track from scripting them every second.

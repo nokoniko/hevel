@@ -151,7 +151,7 @@ final class NowPlayingModel: ObservableObject {
         pollTimer?.invalidate()
     }
 
-    /// Handle one streamed system snapshot (called off the main thread).
+    /// Handle one streamed system snapshot.
     private func handleStreamUpdate(_ sysInfo: NowPlayingInfo?) {
         Task { @MainActor [weak self] in
             guard let self else { return }
