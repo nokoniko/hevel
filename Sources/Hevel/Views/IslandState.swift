@@ -25,8 +25,5 @@ final class IslandState: ObservableObject {
     /// Clicking a battery alert (a "down" one opens the battery settings).
     var onTapAlert: (() -> Void)?
 
-    /// Whether a non-music activity currently wants the island popped out.
-    var hasCollapsedActivity: Bool { chargingFlourish != nil || batteryAlert != nil }
-
     init(metrics: NotchMetrics) { self.metrics = metrics }
 }

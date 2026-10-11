@@ -31,34 +31,6 @@ enum MediaFallback {
         return pausedTrack
     }
 
-    /// The player app that currently has a track loaded (playing or paused).
-    static func activeApp() -> String? {
-        for s in sources where isRunning(s.bundle) {
-            let src = """
-            tell application "\(s.app)"
-                if it is running then return player state as text
-                return "stopped"
-            end tell
-            """
-            guard let script = NSAppleScript(source: src) else { continue }
-            var error: NSDictionary?
-            let state = script.executeAndReturnError(&error).stringValue ?? ""
-            if error == nil, state != "stopped", !state.isEmpty { return s.app }
-        }
-        return nil
-    }
-
-    /// Send a transport command (e.g. "playpause", "next track", "previous track")
-    /// to the given app. Returns true on success.
-    @discardableResult
-    static func send(_ command: String, to app: String) -> Bool {
-        let src = "tell application \"\(app)\" to \(command)"
-        guard let script = NSAppleScript(source: src) else { return false }
-        var error: NSDictionary?
-        script.executeAndReturnError(&error)
-        return error == nil
-    }
-
     private static func isRunning(_ bundleID: String) -> Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
@@ -191,33 +163,6 @@ enum MediaFallback {
         info.sourceApp = browser
         return info
     }
-
-    /// Toggle play/pause (or next/prev) in a browser's active tab via JavaScript.
-    @discardableResult
-    static func browserCommand(_ command: BrowserCommand, in name: String, chromium: Bool) -> Bool {
-        let js: String
-        switch command {
-        case .playPause:
-            js = "var v=document.querySelector('video,audio');if(v){v.paused?v.play():v.pause();}"
-        case .next:
-            js = "var b=document.querySelector('.ytp-next-button,[aria-label*=Next],[title*=Next]');if(b)b.click();"
-        case .previous:
-            js = "var b=document.querySelector('.ytp-prev-button,[aria-label*=Previous],[title*=Previous]');if(b)b.click();"
-        }
-        let escaped = js.replacingOccurrences(of: "\"", with: "\\\"")
-        let source = chromium
-            ? "tell application \"\(name)\" to execute front window's active tab javascript \"\(escaped)\""
-            : "tell application \"\(name)\" to do JavaScript \"\(escaped)\" in current tab of front window"
-        guard let script = NSAppleScript(source: source) else { return false }
-        var error: NSDictionary?
-        script.executeAndReturnError(&error)
-        return error == nil
-    }
-
-    enum BrowserCommand { case playPause, next, previous }
-
-    static func isBrowser(_ app: String) -> Bool { browsers.contains { $0.name == app } }
-    static func isChromium(_ app: String) -> Bool { browsers.first { $0.name == app }?.chromium ?? true }
 
     private static func isRunningByName(_ name: String) -> Bool {
         NSWorkspace.shared.runningApplications.contains { $0.localizedName == name }

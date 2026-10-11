@@ -9,7 +9,7 @@ import AppKit
 ///
 /// To stay light on RAM, metadata streams from a **single long-lived** helper
 /// process (one JSON line/second — no per-second process spawning, no zombies).
-/// Artwork and transport commands are occasional one-off calls.
+/// Artwork is an occasional one-off call.
 final class SystemNowPlaying {
     static let shared = SystemNowPlaying()
     private init() {}
@@ -91,12 +91,6 @@ final class SystemNowPlaying {
         guard let out = runPythonOnce(code)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !out.isEmpty, let data = Data(base64Encoded: out) else { return nil }
         return NSImage(data: data)
-    }
-
-    /// Send a MediaRemote transport command (0 play, 1 pause, 2 toggle, 4 next, 5 prev).
-    static func sendCommand(_ command: Int) {
-        guard let dylib = dylibPath else { return }
-        _ = runPythonOnce("import ctypes; ctypes.CDLL(\(pyString(dylib))).mr_command(\(command))")
     }
 
     // MARK: Internals

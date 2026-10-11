@@ -81,8 +81,9 @@ Sources/Hevel/
   Media/
     SystemNowPlaying.swift         persistent python3+dylib streaming helper
     MediaFallback.swift            Spotify/Music + browser via AppleScript
-    MediaKeys.swift                synthesize media keys (last-resort transport)
     PowerMonitor.swift             IOKit.ps charging detection
+  Unused/
+    PlaybackControls.swift         play/pause/next/previous, out of the build (#if false)
   Models/
     NowPlayingInfo.swift           the shared now-playing snapshot struct
     NowPlayingModel.swift          @MainActor ObservableObject; the app's brain
@@ -211,7 +212,7 @@ Load a tiny C dylib **inside an Apple-signed host** — `/usr/bin/python3` — v
 ctypes. Apple-signed processes are *not* gated, so MediaRemote works there.
 
 Key gotcha discovered the hard way: the dylib exports **ordinary functions**
-(`mr_stream`, `mr_get_artwork`, `mr_command`) and is driven by calling them. Do
+(`mr_stream`, `mr_get_artwork`) and is driven by calling them. Do
 **not** use `__attribute__((constructor))` — that runs during `dlopen`, before the
 runtime/run-loop is ready, and the async MediaRemote callbacks never fire. The
 functions set up on `dispatch_get_main_queue()` and call `CFRunLoopRun()`.
@@ -225,15 +226,14 @@ functions set up on `dispatch_get_main_queue()` and call `CFRunLoopRun()`.
   `{"title","artist","album","id","duration","elapsed","isPlaying","pid"}`.
 - `mr_get_artwork()` — one-off; prints base64 artwork (heavy, so only on track
   change). 3s timeout safety.
-- `mr_command(int)` — transport: 0 play, 1 pause, 2 toggle, 4 next, 5 prev. Needs
-  `CFRunLoopRunInMode(..., 0.5, false)` so the XPC command actually gets delivered
-  before the process exits.
+- (`mr_command(int)`, the transport call, is parked in `Unused/PlaybackControls.swift`
+  with the rest of the playback controls.)
 
 `SystemNowPlaying` (Swift side):
 - `start(onUpdate:)` spawns **one long-lived** `python3 -c "...mr_stream()"`
   process and parses stdout line-by-line into `Info` (sourceApp = `"system"`).
   Respawns on unexpected termination.
-- `fetchArtwork()` and `sendCommand()` are one-off `python3` invocations.
+- `fetchArtwork()` is a one-off `python3` invocation.
 - **RAM lesson:** an earlier design spawned a python3 *per second*. That leaked
   zombie processes and pushed RAM to ~76 MB. The single persistent streamer fixed
   it (~41–46 MB).
@@ -294,12 +294,10 @@ flipping in and then blinking to the new one.
 - `accent` = dominant artwork color: downscale the image to 1×1 px, read the
   pixel, brighten in HSB so it reads on dark chrome. Used to tint the equalizer.
 - `clear()` resets everything and cancels the linger.
-- Transport: `togglePlayPause/next/previous` → `control(...)` routes to whatever
-  is *actually* playing: system source → `mr_command` (targets the real now-
-  playing app — this is why pausing a YouTube tab no longer accidentally starts
-  Spotify); browser source → `browserCommand` JS; Spotify/Music → AppleScript;
-  else synthesize a media key. `togglePlayPause` toggles `isPlaying` optimistically
-  for instant UI feedback, corrected by the next stream snapshot.
+- Transport (`togglePlayPause/next/previous` → `control(...)`) is unused — the island
+  has no controls — and lives out of the build in `Unused/PlaybackControls.swift`.
+  It routed to whatever is *actually* playing: system source → `mr_command`,
+  browser → `browserCommand` JS, Spotify/Music → AppleScript, else a media key.
 
 ## 6. The view (IslandView.swift)
 
@@ -412,7 +410,6 @@ are private and may change across macOS releases — hence the fail-silently des
 - `PowerMonitor.swift` — IOKit.ps; `onPlugChange(Bool)` callback + `level` (battery
   %). An `initialized` flag suppresses the first reading so the flourish doesn't
   fire at launch.
-- `MediaKeys.swift` — synthesizes NX media keys as the last-resort transport.
 
 ## 10. Build & run
 
@@ -639,8 +636,8 @@ right-click → Open.)
   block delivery; derive `isPlaying` from `PlaybackRate` in `fillFrom`, and only
   fall back to `GetPlaying` when rate is unknown.
 - Don't spawn a process per poll (RAM/zombies). Keep the single streamer.
-- Transport must go through `mr_command` for system/browser sources, or it targets
-  the wrong app.
+- If playback controls come back: transport must go through `mr_command` for
+  system/browser sources, or it targets the wrong app.
 - Keep content in an overlay clipped to the shape; never let content drive the
   black shape's size, or the slide-reveal breaks and the pill mis-sizes.
 - Concurrency: stream parsing is off-main; UI mutations hop to `@MainActor`.

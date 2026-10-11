@@ -13,7 +13,6 @@ typedef void (*GetInfo)(dispatch_queue_t, void(^)(CFDictionaryRef));
 typedef void (*GetPlaying)(dispatch_queue_t, void(^)(Boolean));
 typedef void (*GetPID)(dispatch_queue_t, void(^)(int));
 typedef void (*RegisterNotify)(dispatch_queue_t);
-typedef Boolean (*SendCmd)(int, CFDictionaryRef);
 
 static char gTitle[2048], gArtist[2048], gAlbum[2048], gId[512];
 static double gDur, gEla; static int gPlaying; static int gPid;
@@ -126,12 +125,4 @@ void mr_get_artwork(void){
     });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,3LL*NSEC_PER_SEC),dispatch_get_main_queue(),^{ if(!gArtDone){printf("\n");fflush(stdout);CFRunLoopStop(CFRunLoopGetMain());} });
     CFRunLoopRun();
-}
-
-// --- Transport command: 0 play,1 pause,2 toggle,4 next,5 previous. ---
-void mr_command(int cmd){
-    void* h=mrHandle(); if(!h) return;
-    SendCmd s=(SendCmd)dlsym(h,"MRMediaRemoteSendCommand");
-    if(s) s(cmd,NULL);
-    CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.5,false);
 }

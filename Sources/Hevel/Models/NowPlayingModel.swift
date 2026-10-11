@@ -3,7 +3,7 @@ import Combine
 
 /// Observable state for the island. Pulls now-playing info from MediaRemote
 /// (with an AppleScript fallback), keeps the elapsed time ticking locally so the
-/// scrubber moves smoothly, and drives playback via system media keys.
+/// scrubber moves smoothly.
 @MainActor
 final class NowPlayingModel: ObservableObject {
 
@@ -363,43 +363,6 @@ final class NowPlayingModel: ObservableObject {
             }
             return true
         }
-    }
-
-    // MARK: Controls
-
-    func togglePlayPause() {
-        control(appleScript: "playpause", mediaKey: .playPause)
-        isPlaying.toggle()          // optimistic; the stream corrects it within ~1s
-        lastUpdate = Date()
-    }
-
-    func next() {
-        control(appleScript: "next track", mediaKey: .next)
-    }
-
-    func previous() {
-        control(appleScript: "previous track", mediaKey: .previous)
-    }
-
-    /// Route a control to whatever is *actually* playing. When the track comes
-    /// from the system now-playing helper (the usual case — covers browsers, all
-    /// apps), send a MediaRemote command, which targets the real now-playing app.
-    /// Otherwise fall back to Spotify/Music AppleScript or the system media key.
-    private func control(appleScript command: String, mediaKey: MediaKey) {
-        if currentSource == "system", SystemNowPlaying.isAvailable {
-            let cmd = command == "playpause" ? 2 : (command == "next track" ? 4 : 5)
-            DispatchQueue.global(qos: .userInitiated).async { SystemNowPlaying.sendCommand(cmd) }
-        } else if let source = currentSource, MediaFallback.isBrowser(source) {
-            let browserCmd: MediaFallback.BrowserCommand =
-                command == "playpause" ? .playPause : (command == "next track" ? .next : .previous)
-            MediaFallback.browserCommand(browserCmd, in: source, chromium: MediaFallback.isChromium(source))
-        } else if let app = MediaFallback.activeApp() {
-            MediaFallback.send(command, to: app)
-        } else {
-            MediaKeys.post(mediaKey)
-        }
-        // The stream corrects the real state within ~1s; the optimistic toggle in
-        // togglePlayPause() gives instant feedback in the meantime.
     }
 
     // MARK: Helpers

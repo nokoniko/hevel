@@ -52,7 +52,4 @@ final class NotchController {
         setupCharging()
         setupActivation()
     }
-
-    func show() { panel.orderFrontRegardless() }
-    func hide() { panel.orderOut(nil) }
 }
