@@ -91,6 +91,7 @@ Sources/Hevel/
     NotchShape.swift               the concave-top Dynamic Island shape
     EqualizerView.swift            audio visualizer bars
     FlippingArtwork.swift          coin-flip album art on track change
+    BatteryAlertView.swift         a battery alert ("80% Battery") below the notch
     ChargingRing.swift             circular battery gauge + battery-color logic
     LockIslandView.swift           static lock-screen lock icon
     NotchMetrics.swift             notch geometry
@@ -113,8 +114,11 @@ Sources/Hevel/
     Localization.swift             tr("…"), the language setting, right-to-left
     GeneralSettingsView.swift      General: About, a "Software Update ›" link, Startup
     UpdateSettingsView.swift       General → Software Update: Check Now + every update setting
-    IslandSettingsView.swift       Island: visibility, animation, lock toggles
+    IslandSettingsView.swift       Island: preview + size slider, visibility, animation, lock toggles
+    IslandPreview.swift            the miniature screen (wallpaper, menu bar, real IslandView)
     LanguageSettingsView.swift     Language: the language picker
+    BatteryAlertsSettingsView.swift Island → Battery alerts: the 0–100 % bar + alert rows
+    DeveloperSettingsView.swift    Developer (developer builds): show/hide each event
     SettingsIcon.swift             colored rounded-square icons for sidebar and rows
     SettingsWindowController.swift opens the single settings window (menu → Settings…)
   Updater/
@@ -478,6 +482,79 @@ drag-to-install `dist/Hevel-<v>.dmg` (app + `/Applications` symlink,
 before running `gh release create v<v> <zip> <sig> <dmg> --generate-notes`. The dmg
 is only for first installs — the updater picks the `.zip` asset and ignores it. `dist/` is
 gitignored. The tag is created from what's pushed, so push first.
+
+**Helper and settings memory.** The `mr_stream` helper ends itself when the app is
+gone: its 1 s heartbeat compares `getppid()` with the parent it started under
+(re-parented to launchd = the app died, however — crash, `kill -9`, an update's
+relaunch). Without that, every unclean exit left a ~5 MB python3 behind. The settings
+window drops its `NSHostingController` on close (`contentViewController = nil`) and
+builds a fresh one on open, so the wallpaper thumbnail, the preview's model and its
+timers don't live on in a closed window.
+
+**Island size and the preview.** `NotchMetrics.scale` (Settings → Island →
+slider, `islandScale`, 0.8–1.3, default 1) widens or narrows the pop-out
+(`collapsedSidePadding`) and scales its content (`artworkSize`, `ringSize`,
+`symbolSize`, the equalizer), capped at the notch's height; the canvas fits the
+largest size, and the low-battery alert isn't scaled. `NotchController` rebuilds
+its metrics (`currentMetrics()`) and click-through rects whenever the value changes.
+Above the slider, `IslandPreviewSection` draws the top of the screen in miniature
+(×0.72): the desktop picture (`desktopImageURL`, thumbnailed to 1200 px with
+ImageIO; a gradient if it's not a plain image), a fake menu bar, and the real
+`IslandView` / `LockIslandView` on their own `NowPlayingModel` + `IslandState`,
+switched by a segmented control (lock screen, idle, charging, battery — which cycles
+through the alerts set up under Battery alerts, `BatteryAlerts.previewSequence`, a
+`both` one shown down and then up — and track, which steps the made-up track every
+3 s).
+
+**Developer builds.** `cargo run` builds (never `--bin release`) get
+`HevelDeveloperBuild = true` and a `hevel://` URL scheme in Info.plist
+(`info_plist(…, developer)`). `DeveloperMode.isEnabled` reads that key. Settings then
+shows a Developer pane with **Show** / **Hide** per `PreviewEvent` (music,
+charging, lowBattery, lock) plus ⏮/⏭ for music, and `AppDelegate.application(_:open:)`
+handles `hevel://preview/<event>`, `hevel://hide/<event>`, `hevel://track/next|previous`
+and `hevel://settings` — which is what `./preview.sh` opens (`open -g`, so it doesn't
+take focus). Both go through `AppDelegate.run(_:)`. **Music** puts
+`NowPlayingModel` in preview mode: a made-up track (`previewInfo`, a generated
+two-tone cover per track, so the flip and the accent color change) plays, and real
+stream/poll updates go to `heldBack` instead of the screen (`receive`); hiding
+restores the last real state.
+`NotchController.preview(_:)` runs the real code paths (`showChargingFlourish`,
+`showBatteryAlert`, `setLocked(true)`) but cancels their auto-dismiss, so a
+previewed event stays up until `hidePreview(_:)`. Release builds have neither the pane nor the scheme.
+
+**Clicking the island.** A click on the music pop-out brings the playing app to the
+front (`activatePlayingApp`). The now-playing PID is traced to its app first
+(`owningApp(ofPID:)`): itself if it's a regular app, else the process macOS holds
+responsible for it (`responsibility_get_pid_responsible_for_pid`, e.g. Safari for its
+WebKit helpers), else the running app whose bundle ID it extends
+(`familyApp`: com.google.Chrome.helper → com.google.Chrome). It's opened with
+`NSWorkspace.openApplication` (activates = true), like a Dock click: macOS 14+
+ignores `NSRunningApplication.activate()` from an app that isn't active, and
+clicking the non-activating island panel never makes Hevel active.
+
+**Battery alerts.** Like the iPhone's low-battery alert, but user-defined: Settings →
+Island → **Battery alerts ›** (`BatteryAlertsSettingsView`) has a 0–100 % bar — a click
+adds an alert at the nearest 5 % (`BatteryAlerts.level(atFraction:)`), counting
+**up** in the top half and **down** in the bottom half by default — and a row per
+alert to switch it between up, down and **both** (either way), or delete it. Pins can
+be dragged along the bar (snapping to 5 %, saved on release via
+`BatteryAlerts.moving`, which leaves things as they were if another alert has that
+level). Stored as JSON under `batteryAlerts`
+(default: 20 % down, the old fixed alert); `lowBatteryAlert` is the on/off switch
+for all of them. `PowerMonitor.onLevelChange(previous, current, pluggedIn)` →
+`BatteryAlerts.triggered`: an up alert fires when charging crosses its level, a
+down one when the battery runs down past it on battery, a both one either way (and
+is shown with the way it actually went); one jump past several
+picks the nearest. `NotchController.showBatteryAlert` sets
+`IslandState.batteryAlert`; `IslandView` grows the pill to
+`NotchMetrics.alertWidth × alertHeight` below the notch (bottom radius animates via
+`NotchShape.animatableData`) with `BatteryAlertView` — "80% Battery", a line about
+it, and a battery at that level in the charging ring's colors. It goes after 6 s, on
+click, or when the plug changes against it (plugging in ends a down alert,
+unplugging an up one). Clicking a down alert opens Battery settings
+(`x-apple.systempreferences:com.apple.Battery-Settings.extension`) — an
+unprivileged app can't toggle Low Power Mode itself. While it shows, click-through
+uses `alertRect`.
 
 **Languages.** English, Norwegian Bokmål (`nb`) and Hebrew (`he`). Every visible
 text goes through `tr("English text")` (or `tr("… %@ …", arg)`), which looks it up in

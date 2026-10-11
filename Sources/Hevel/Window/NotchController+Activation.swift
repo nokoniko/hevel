@@ -63,9 +63,52 @@ extension NotchController {
         return false
     }
 
+    /// Brings the app that's playing to the front. A browser plays from a helper
+    /// process, so that's traced back to the browser itself first. It goes through
+    /// `openApplication` — like clicking the app in the Dock — because macOS 14+
+    /// ignores `activate()` from an app that isn't active itself, and clicking the
+    /// island doesn't make Hevel active.
     private func activatePlayingApp() {
-        guard let pid = model.playingPID,
-              let app = NSRunningApplication(processIdentifier: pid_t(pid)) else { return }
-        app.activate(options: [.activateAllWindows])
+        guard let pid = model.playingPID, let app = Self.owningApp(ofPID: pid_t(pid)) else { return }
+        guard let url = app.bundleURL else {
+            app.activate(options: [.activateAllWindows])
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+
+    /// The regular app behind `pid`: itself, the app macOS holds responsible for it,
+    /// or the running app whose bundle ID it extends (com.google.Chrome.helper →
+    /// com.google.Chrome).
+    static func owningApp(ofPID pid: pid_t) -> NSRunningApplication? {
+        let app = NSRunningApplication(processIdentifier: pid)
+        if let app, app.activationPolicy == .regular { return app }
+        if let responsible = responsiblePID(for: pid), responsible != pid,
+           let owner = NSRunningApplication(processIdentifier: responsible), owner.activationPolicy == .regular {
+            return owner
+        }
+        let regular = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+        guard let helperID = app?.bundleIdentifier,
+              let index = familyApp(of: helperID, among: regular.map(\.bundleIdentifier)) else { return app }
+        return regular[index]
+    }
+
+    /// The candidate whose bundle ID is the longest prefix of the helper's, if any.
+    nonisolated static func familyApp(of helperID: String, among candidates: [String?]) -> Int? {
+        candidates.indices
+            .filter { i in candidates[i].map { helperID.hasPrefix($0 + ".") } ?? false }
+            .max { (candidates[$0]?.count ?? 0) < (candidates[$1]?.count ?? 0) }
+    }
+
+    /// The process macOS holds responsible for `pid` (e.g. Safari for its WebKit
+    /// helpers), via libSystem's `responsibility_get_pid_responsible_for_pid`.
+    private static func responsiblePID(for pid: pid_t) -> pid_t? {
+        typealias Responsible = @convention(c) (pid_t) -> pid_t
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_get_pid_responsible_for_pid")
+        else { return nil }
+        let responsible = unsafeBitCast(symbol, to: Responsible.self)(pid)
+        return responsible > 0 ? responsible : nil
     }
 }

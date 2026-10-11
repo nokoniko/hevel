@@ -203,3 +203,16 @@ struct FrontmostTests {
 		#expect(bundleLookups == 0)
 	}
 }
+
+struct PlayingAppTests {
+	@Test(arguments: [
+		("com.google.Chrome.helper", ["com.apple.finder", "com.google.Chrome"], 1),
+		("com.google.Chrome.helper.renderer", ["com.google.Chrome", "com.google.Chrome.helper"], 1),
+		("com.brave.Browser.helper", ["com.google.Chrome", "com.brave.Browser"], 1),
+		("com.google.Chromex", ["com.google.Chrome"], nil),
+		("com.apple.WebKit.GPU", ["com.apple.Safari"], nil),
+	] as [(String, [String], Int?)])
+	func tracesAHelperBackToItsApp(helper: String, running: [String], expected: Int?) {
+		#expect(NotchController.familyApp(of: helper, among: running) == expected)
+	}
+}

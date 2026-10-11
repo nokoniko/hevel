@@ -4,7 +4,9 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = NowPlayingModel()
     private let updater = Updater()
-    private lazy var settings = SettingsWindowController(updater: updater)
+    private lazy var settings = SettingsWindowController(updater: updater) { [weak self] command in
+        self?.run(command)
+    }
     private var controller: NotchController?
     private var statusItem: NSStatusItem?
     private var menuLanguage = ""
@@ -36,6 +38,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuLanguage = Localization.language
         statusItem?.menu = statusMenu()
         setupMainMenu()
+    }
+
+    /// `hevel://` links from `preview.sh` (developer builds only).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard DeveloperMode.isEnabled else { return }
+        for case let command? in urls.map(DeveloperMode.command(for:)) { run(command) }
+    }
+
+    /// From the Developer pane or a `hevel://` link.
+    private func run(_ command: DeveloperMode.Command) {
+        switch command {
+        case .preview(let event): controller?.preview(event)
+        case .hide(let event): controller?.hidePreview(event)
+        case .track(let forward): controller?.previewTrack(forward: forward)
+        case .openSettings: settings.show()
+        }
     }
 
     private static var screenIsLocked: Bool {

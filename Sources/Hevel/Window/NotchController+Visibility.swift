@@ -34,7 +34,7 @@ extension NotchController {
         updateVisibility()
     }
 
-    private func setLocked(_ locked: Bool) {
+    func setLocked(_ locked: Bool) {
         if locked {
             guard Preferences.lockScreenIcon else { return }
             // Built lazily on the first lock — most sessions never lock, so we don't
@@ -45,7 +45,9 @@ extension NotchController {
             // Must re-add every time it's shown — the space assignment doesn't
             // survive orderOut. No-op if SkyLight is unavailable.
             SkyLightSpace.shared?.add(window: lockPanel)
+            state.locked = true
         } else {
+            state.locked = false
             lockPanel?.orderOut(nil)
         }
     }

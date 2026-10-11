@@ -8,6 +8,12 @@ struct NotchShape: Shape {
     var topRadius: CGFloat
     var bottomRadius: CGFloat
 
+    /// So the corners round smoothly when the island grows into the alert.
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(topRadius, bottomRadius) }
+        set { (topRadius, bottomRadius) = (newValue.first, newValue.second) }
+    }
+
     func path(in rect: CGRect) -> Path {
         let t = min(topRadius, min(rect.width, rect.height) / 2)
         let b = min(bottomRadius, min(rect.width, rect.height) / 2)

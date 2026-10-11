@@ -11,6 +11,9 @@ final class PowerMonitor {
     /// Called when the plug state changes: `true` = just plugged in.
     var onPlugChange: ((Bool) -> Void)?
 
+    /// Called when the level changes: the previous and new %, and whether it's plugged in.
+    var onLevelChange: ((_ previous: Int, _ current: Int, _ pluggedIn: Bool) -> Void)?
+
     private var runLoopSource: CFRunLoopSource?
     private var initialized = false
 
@@ -45,6 +48,7 @@ final class PowerMonitor {
             else { continue }
 
             let onAC = (desc[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue
+            let previousLevel = level
             let current = desc[kIOPSCurrentCapacityKey] as? Int ?? level
             let maximum = desc[kIOPSMaxCapacityKey] as? Int ?? 100
             level = maximum > 0 ? Int((Double(current) / Double(maximum) * 100).rounded()) : current
@@ -53,8 +57,23 @@ final class PowerMonitor {
             pluggedIn = onAC
             // Don't fire the flourish for the initial reading (only real changes).
             if initialized, pluggedIn != was { onPlugChange?(pluggedIn) }
+            if initialized, level != previousLevel { onLevelChange?(previousLevel, level, onAC) }
             initialized = true
             return   // internal battery is the first source
         }
+    }
+}
+
+extension PowerMonitor {
+    /// The internal battery's level right now (for the settings preview), if there is one.
+    static func currentLevel() -> Int? {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef],
+              let source = list.first,
+              let desc = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue() as? [String: Any],
+              let current = desc[kIOPSCurrentCapacityKey] as? Int
+        else { return nil }
+        let maximum = desc[kIOPSMaxCapacityKey] as? Int ?? 100
+        return maximum > 0 ? Int((Double(current) / Double(maximum) * 100).rounded()) : current
     }
 }

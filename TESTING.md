@@ -28,12 +28,17 @@ CI runs both suites on `macos-latest` for every push to `main` and every pull re
 |---|---|---|
 | Updater | `ReleaseFeedTests`, `UpdateSignatureTests` | Numeric version comparison, which updates count as small; signature checks (valid, tampered zip, wrong key, empty or non-hex `.sig`, bad public keys) |
 | Settings navigation | `SettingsHistoryTests` | Back/forward retrace the pages, a new page drops the forward steps, Software Update belongs to General |
+| Battery alerts | `BatteryAlertsTests` | Up alerts fire charging past their level, down ones on battery, both either way; dragging a pin onto a taken level changes nothing; nearest wins on a jump; the preview's order (top level first, both = down then up); a click picks the nearest 5 %; storage round-trips; the default is 20 % down |
+| Playback preview | `PlaybackPreviewTests` | A made-up track plays, next/previous flip that way, hiding leaves nothing behind |
+| Developer builds | `DeveloperModeTests` + `only_developer_builds_get_the_developer_tools` | `hevel://` links → events/settings, anything else ignored; only `cargo run` builds get the Developer pane and URL scheme |
 | Languages | `LocalizationTests` | Every `tr` text is in the Norwegian and Hebrew tables, no unused keys, matching `%@` placeholders; which language "System" picks |
 | Install | `UpdateInstallerTests` | Picks `Hevel.app` from an update, falls back to `DynamicIsland.app` (releases from before the rename) |
 | Rust ↔ CryptoKit | `RustSignedFixtureTests` + `signature_fixture_comes_from_the_builders_signing` | A zip signed by the builder's `sign_hex` verifies in CryptoKit, and fails once tampered |
 | Media flow | `ReconcileTests`, `PauseLingerTests` | The three reconcile rules, `sameTrack`, and which sources linger on pause |
 | Parsing | `StreamLineParsingTests`, `AppleScriptParsingTests`, `BrowserScriptParsingTests` | Broken lines, missing fields, Spotify ms vs Music seconds, comma decimals, live-stream durations |
 | Settings | `UpdateScheduleTests`, `SettingsSearchTests`, `PreferencesTests` | Next update check per frequency/time of day (missed and late checks, clock changes); search by title, keyword and pane name; defaults |
+| Island size | `NotchMetricsTests` | The slider scales the pop-out, content never outgrows the notch, the canvas fits the largest size |
+| Clicking the island | `PlayingAppTests` | A browser helper's bundle ID is traced back to its browser |
 | Window | `NotchGeometryTests`, `FullscreenDetectionTests`, `PopoutTests`, `FrontmostTests` | Notch metrics with/without a notch, fullscreen overlay detection on fake window lists, pop-out visibility, frontmost matching |
 | Builder | `cargo test` in `builder/` | `VERSION` parsing, generated `Info.plist` (validated with `plutil`), GitHub remote parsing |
 
@@ -52,6 +57,11 @@ cd builder && cargo test -- --ignored regenerate_signature_fixture
 
 ## Manual checklist
 
+Most of these can be shown on demand in a developer build (`cd builder && cargo run`):
+Settings → **Developer** (Show / Hide, ⏮ ⏭ for music), or `./preview.sh music | charging | lowBattery | lock`,
+`./preview.sh next | previous` and
+`./preview.sh hide`. A previewed event stays up until you hide it.
+
 Run through this before a release. These depend on the live system and can't run in CI.
 
 **Now playing (MediaRemote via python3)**
@@ -63,16 +73,17 @@ Run through this before a release. These depend on the live system and can't run
 - [ ] Playing app in front: island hidden. Switch to another app: it comes back.
 
 **Lock screen (SkyLight)**
-- [ ] Lock with Ctrl+Cmd+Q: a lock icon shows left of the notch on the lock screen.
+- [ ] Lock with Ctrl+Cmd+Q: a lock icon slides out left of the notch on the lock screen.
 - [ ] Unlock: the lock icon is gone and the normal island works.
 
 **Animations and charging**
 - [ ] Pop-out slides out from behind the notch (not a fade).
+- [ ] Island → **Battery alerts ›**: clicking the bar adds an alert at that level (↑ above 50 %, ↓ below); dragging a pin moves it (in 5 % steps; dropping it on another alert's level puts it back); each row switches up / down / both and deletes; a "both" alert fires charging up and running down. On battery, running down past a ↓ level grows the island into "NN% Battery" (click → Battery settings); charging past an ↑ level shows it with "Reached while charging". ~6 s, plugging/unplugging against it dismisses it; the switch turns them all off.
 - [ ] Plug in power: the ring draws to the battery level in ~1.1 s (red < 20 %, orange < 80 %, green ≥ 80 %) and the flourish disappears after ~3 s.
 
 **Click-through and fullscreen**
 - [ ] While music plays, menu-bar icons next to the notch are still clickable.
-- [ ] Clicking the island brings the playing app to the front.
+- [ ] Clicking the island brings the playing app to the front — Spotify, Music, and a browser tab (Chrome/Safari), also while another app is active.
 - [ ] Nothing playing: clicks anywhere near the notch pass straight through.
 - [ ] Fullscreen app on the notched screen: island hidden; leave fullscreen: it returns.
 
@@ -87,10 +98,11 @@ Run through this before a release. These depend on the live system and can't run
 - [ ] Running from Downloads (translocated) shows the "Move Hevel to your Applications folder" message.
 
 **Settings**
-- [ ] Menu bar icon → **Settings…** opens the window centered on the screen you're on and in front of other apps (even with another app active); opening it again reuses the window without moving it.
+- [ ] Menu bar icon → **Settings…** opens the window focused (the first click already works, no click to activate it), centered on the screen you're on and in front of other apps (even with another app active); opening it again reuses the window without moving it.
 - [ ] While it's open the app is in the Dock and ⌘Tab; ⌘W closes it and the Dock icon goes away.
 - [ ] ⌘Q in settings asks "Quit Hevel?"; **Cancel** keeps everything running, **Quit** quits. Quit from the menu bar icon quits without asking.
 - [ ] General → **Software Update ›** opens the update page; the ‹ › arrows (and ⌘[ / ⌘]) go back and forward through the pages visited, greyed out when there's nowhere to go. Searching "update" shows the update rows right in General.
+- [ ] Island pane: the preview shows your wallpaper with a menu bar and the island; each of Lock Screen / Idle / Charging / Battery / Track shows that state (Track flips every 3 s; Battery cycles through your battery alerts, each growing out of the notch). Into and out of Lock Screen is smooth: the lock pill grows out of the notch, blur, clock and menu bar fade, the notch itself stays black. Dragging the size slider resizes the preview **and** the real island at once.
 - [ ] **Language**: switching to Norsk or עברית changes the window, the menu bar menu and alerts at once, without a restart. Hebrew mirrors the window (sidebar right, panes open at the top) and the island (art/bolt right of the notch, equalizer/ring left); English switches it back.
 - [ ] **Launch at login** survives a log out/in (or asks to be allowed in Login Items).
 - [ ] Each toggle takes effect without a restart: hiding while the player is in front, the cover flip, the charging animation, the lock icon.
@@ -100,6 +112,8 @@ Run through this before a release. These depend on the live system and can't run
 - [ ] Search: "lock" leaves only Island with the lock row, "update" only General, nonsense shows "No Results"; clearing it brings everything back.
 
 **Memory**
-- [ ] `footprint -t $(pgrep -f Hevel.app/Contents/MacOS) | grep phys_footprint` is about 27–30 MB idle.
+- [ ] `footprint -t $(pgrep -f Hevel.app/Contents/MacOS) | grep phys_footprint` is about 25–30 MB idle (more once Settings has been opened in this run).
 - [ ] The python3 helper stays around 5 MB (`ps -o rss= -p $(pgrep -f mr_stream)`).
+- [ ] Exactly one helper runs (`pgrep -fl mr_stream`); after `kill -9` of the app it exits by itself within a second or two (no orphans with parent 1).
+- [ ] Opening Settings raises memory (SwiftUI/AppKit warm up, the wallpaper preview); closing it drops the content again, and repeated open/close doesn't keep growing.
 - [ ] After 30+ minutes of playback and track changes the numbers haven't crept up.

@@ -31,14 +31,20 @@ struct IslandView: View {
             .fill(Color.black)
             .frame(width: currentWidth, height: currentHeight)
             .overlay(alignment: .top) {
-                if hasActivity { collapsedContent }
+                if case .batteryAlert(let alert) = activity {
+                    BatteryAlertView(alert: alert, metrics: m)
+                        .contentShape(Rectangle())
+                        .onTapGesture { state.onTapAlert?() }
+                } else if hasActivity {
+                    collapsedContent
+                }
             }
             .clipShape(islandShape)
             .animation(.spring(response: 0.5, dampingFraction: 0.82), value: popKey)
     }
 
     private var islandShape: NotchShape {
-        NotchShape(topRadius: 0, bottomRadius: m.collapsedCornerRadius)
+        NotchShape(topRadius: 0, bottomRadius: isAlert ? m.alertCornerRadius : m.collapsedCornerRadius)
     }
 
     /// Music is shown unless the playing app is already frontmost.
@@ -47,29 +53,34 @@ struct IslandView: View {
     }
 
     // What the island is currently showing, by priority.
-    enum Activity { case charging(Int), music, none }
+    enum Activity { case batteryAlert(BatteryAlert), charging(Int), music, none }
     private var activity: Activity {
+        if let alert = state.batteryAlert { return .batteryAlert(alert) }
         if let level = state.chargingFlourish { return .charging(level) }
         if showMusic { return .music }
         return .none
     }
     private var hasActivity: Bool { if case .none = activity { return false }; return true }
+    private var isAlert: Bool { if case .batteryAlert = activity { return true }; return false }
 
     /// Music is paused but still lingering — the art shrinks in place before it hides.
     private var musicDimmed: Bool { model.pausedLingering && !model.isPlaying }
 
     /// Which activity category is showing — used to animate pop-out changes.
     private var popKey: Int {
+        if state.batteryAlert != nil { return 4 }
         if state.chargingFlourish != nil { return 1 }
         if showMusic { return 3 }
         return 0
     }
 
     private var currentWidth: CGFloat {
-        // Idle: exactly the notch. Any activity: pops out on both sides.
-        hasActivity ? m.collapsedWidth : m.notchWidth
+        // Idle: exactly the notch. Any activity: pops out on both sides. The alert
+        // grows wider and down below the notch.
+        if isAlert { return m.alertWidth }
+        return hasActivity ? m.collapsedWidth : m.notchWidth
     }
-    private var currentHeight: CGFloat { m.restHeight }
+    private var currentHeight: CGFloat { isAlert ? m.alertHeight : m.restHeight }
 
     // MARK: Collapsed content
 
@@ -97,15 +108,15 @@ struct IslandView: View {
             FlippingArtwork(image: model.artwork, token: model.artworkToken,
                             // "Next" flips toward the reading direction.
                             forward: model.flipForward != Localization.isRightToLeft,
-                            size: m.notchHeight - 10, corner: 5, animated: flipArtwork)
+                            size: m.artworkSize, corner: 5 * m.scale, animated: flipArtwork)
                 .scaleEffect(musicDimmed ? 0.65 : 1)
                 .opacity(musicDimmed ? 0.5 : 1)
                 .animation(.easeOut(duration: 0.3), value: musicDimmed)
         case .charging(let level):
             Image(systemName: "bolt.fill")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: m.symbolSize(13), weight: .bold))
                 .foregroundStyle(ChargingRing.color(for: level))
-        case .none:
+        case .batteryAlert, .none:
             EmptyView()
         }
     }
@@ -115,12 +126,13 @@ struct IslandView: View {
         case .music:
             // The visualizer keeps its size; it just dims while paused.
             EqualizerView(color: model.accent, active: model.isPlaying)
+                .scaleEffect(m.scale)
                 .opacity(musicDimmed ? 0.5 : 1)
                 .animation(.easeOut(duration: 0.3), value: musicDimmed)
         case .charging(let level):
             ChargingRing(level: level, color: ChargingRing.color(for: level),
-                         size: m.notchHeight - 6)
-        case .none:
+                         size: m.ringSize)
+        case .batteryAlert, .none:
             EmptyView()
         }
     }

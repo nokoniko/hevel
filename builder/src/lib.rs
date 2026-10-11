@@ -33,7 +33,14 @@ pub fn enter_project_root() -> Res {
 	Ok(())
 }
 
-fn info_plist(version: &str, repo: Option<&str>, public_key: Option<&str>) -> String {
+/// `developer` builds (`cargo run`, never releases) get the Developer pane in Settings
+/// and the `hevel://` URL scheme that `preview.sh` uses to trigger the island's events.
+fn info_plist(version: &str, repo: Option<&str>, public_key: Option<&str>, developer: bool) -> String {
+	let developer_keys = if developer {
+		"\t<key>HevelDeveloperBuild</key>\n\t<true/>\n\t<key>CFBundleURLTypes</key>\n\t<array>\n\t\t<dict>\n\t\t\t<key>CFBundleURLName</key>\n\t\t\t<string>com.niko.dynamicisland.developer</string>\n\t\t\t<key>CFBundleURLSchemes</key>\n\t\t\t<array>\n\t\t\t\t<string>hevel</string>\n\t\t\t</array>\n\t\t</dict>\n\t</array>\n"
+	} else {
+		""
+	};
 	// The updater is only switched on when both its keys are present.
 	let update_keys = match (repo, public_key) {
 		(Some(repo), Some(key)) => format!(
@@ -79,7 +86,7 @@ fn info_plist(version: &str, repo: Option<&str>, public_key: Option<&str>) -> St
 	<string>Hevel reads the currently playing track from Music and Spotify.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Hevel</string>
-{update_keys}</dict>
+{update_keys}{developer_keys}</dict>
 </plist>
 "#
 	)
@@ -349,7 +356,7 @@ pub fn build_app(release: bool) -> Res<String> {
 	}
 	fs::write(
 		format!("{APP}/Contents/Info.plist"),
-		info_plist(&version, repo.as_deref(), key.as_deref()),
+		info_plist(&version, repo.as_deref(), key.as_deref(), !release),
 	)?;
 	if repo.is_none() || key.is_none() {
 		eprintln!("⚠︎ updater is off in this build (needs a GitHub `origin` remote and {PUBLIC_KEY_FILE})");
@@ -438,7 +445,7 @@ mod tests {
 	#[test]
 	fn info_plist_carries_the_version_and_update_keys() {
 		let key = "ab".repeat(32);
-		let plist = info_plist("1.4.2", Some("owner/repo"), Some(&key));
+		let plist = info_plist("1.4.2", Some("owner/repo"), Some(&key), false);
 		assert_eq!(plist_value(&plist, "CFBundleShortVersionString").as_deref(), Some("1.4.2"));
 		assert_eq!(plist_value(&plist, "CFBundleVersion").as_deref(), Some("1.4.2"));
 		assert_eq!(plist_value(&plist, "DIUpdateRepo").as_deref(), Some("owner/repo"));
@@ -451,11 +458,21 @@ mod tests {
 	fn info_plist_leaves_the_updater_off_unless_both_keys_are_known() {
 		let key = "ab".repeat(32);
 		for (repo, public_key) in [(Some("owner/repo"), None), (None, Some(key.as_str())), (None, None)] {
-			let plist = info_plist("1.0.0", repo, public_key);
+			let plist = info_plist("1.0.0", repo, public_key, false);
 			assert_eq!(plist_value(&plist, "DIUpdateRepo"), None);
 			assert_eq!(plist_value(&plist, "DIUpdatePublicKey"), None);
 			assert_eq!(plist_value(&plist, "CFBundleShortVersionString").as_deref(), Some("1.0.0"));
 		}
+	}
+
+	#[test]
+	fn only_developer_builds_get_the_developer_tools() {
+		let release = info_plist("1.0.0", None, None, false);
+		assert_eq!(plist_value(&release, "HevelDeveloperBuild"), None);
+		assert_eq!(plist_value(&release, "CFBundleURLTypes"), None);
+		let developer = info_plist("1.0.0", None, None, true);
+		assert_eq!(plist_value(&developer, "HevelDeveloperBuild").as_deref(), Some("true"));
+		assert_eq!(plist_value(&developer, "CFBundleURLTypes.0.CFBundleURLSchemes.0").as_deref(), Some("hevel"));
 	}
 
 	#[test]

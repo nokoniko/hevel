@@ -11,7 +11,9 @@ struct SettingsSearchTests {
 	@Test(arguments: [
 		("fullscreen", [SettingsItem.showInFullscreen]),
 		("FULL screen", [.showInFullscreen]),
-		("battery", [.chargingAnimation]),
+		("battery", [.chargingAnimation, .batteryAlerts]),
+		("low battery", [.batteryAlerts]),
+		("bigger", [.islandSize]),
 		("version", [.about, .checkForUpdates]),
 		("morning", [.updateTimeOfDay]),
 		("weekly", [.updateFrequency]),

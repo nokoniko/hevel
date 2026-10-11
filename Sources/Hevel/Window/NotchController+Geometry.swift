@@ -63,6 +63,16 @@ extension NotchController {
         poppedNotchRect = CGRect(x: screen.frame.midX - m.collapsedWidth / 2,
                                  y: screen.frame.maxY - m.restHeight,
                                  width: m.collapsedWidth, height: m.restHeight)
+        alertRect = CGRect(x: screen.frame.midX - m.alertWidth / 2,
+                           y: screen.frame.maxY - m.alertHeight,
+                           width: m.alertWidth, height: m.alertHeight)
+    }
+
+    /// The notch's metrics at the size chosen in Settings.
+    static func currentMetrics() -> NotchMetrics {
+        var metrics = metrics(for: targetScreen())
+        metrics.scale = CGFloat(Preferences.islandScale)
+        return metrics
     }
 
     func observeScreenChanges() {
@@ -72,7 +82,17 @@ extension NotchController {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.state.metrics = Self.metrics(for: Self.targetScreen())
+                self.state.metrics = Self.currentMetrics()
+                self.positionWindow()
+            }
+        }
+        // Settings → Island size: follow the slider as it moves.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, CGFloat(Preferences.islandScale) != self.state.metrics.scale else { return }
+                self.state.metrics = Self.currentMetrics()
                 self.positionWindow()
             }
         }

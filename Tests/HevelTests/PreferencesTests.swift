@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Hevel
 
@@ -8,12 +9,22 @@ struct PreferencesTests {
 		(Preferences.flipArtworkKey, true),
 		(Preferences.chargingAnimationKey, true),
 		(Preferences.lockScreenIconKey, true),
+		(Preferences.batteryAlertsEnabledKey, true),
 		(Preferences.autoCheckForUpdatesKey, true),
 		(Preferences.installUpdatesAutomaticallyKey, true),
 		(Preferences.skipSmallUpdatesKey, false),
 	])
 	func defaultsKeepTheOriginalBehavior(key: String, value: Bool) {
 		#expect(Preferences.defaults[key] as? Bool == value)
+	}
+
+	@Test func batteryAlertsStartWithThe20PercentOne() {
+		let data = Preferences.defaults[Preferences.batteryAlertsKey] as? Data
+		#expect(BatteryAlerts.decode(data).map(\.level) == [20])
+	}
+
+	@Test func islandStartsAtItsNormalSize() {
+		#expect(Preferences.defaults[Preferences.islandScaleKey] as? Double == 1.0)
 	}
 
 	@Test func languageFollowsTheSystem() {
@@ -26,6 +37,6 @@ struct PreferencesTests {
 	}
 
 	@Test func everySettingHasADefault() {
-		#expect(Preferences.defaults.count == 11)
+		#expect(Preferences.defaults.count == 14)
 	}
 }

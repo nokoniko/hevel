@@ -19,6 +19,11 @@ extension NotchController {
     }
 
     func updateForPointer() {
+        // A battery alert takes clicks (to open the battery settings / dismiss it) while it shows.
+        if !hiddenForFullscreen, state.batteryAlert != nil {
+            panel.ignoresMouseEvents = !alertRect.contains(NSEvent.mouseLocation)
+            return
+        }
         guard !hiddenForFullscreen, popoutShown else {
             panel.ignoresMouseEvents = true
             return

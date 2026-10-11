@@ -6,12 +6,27 @@ struct NotchMetrics {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
     var hasNotch: Bool
+    /// Settings → Island size: how far the pop-out reaches and how big its content is.
+    var scale: CGFloat = 1
 
-    var collapsedSidePadding: CGFloat { 30 }   // content peeking on each side of the notch when playing
+    static let scaleRange: ClosedRange<CGFloat> = 0.8...1.3
+
+    var collapsedSidePadding: CGFloat { 30 * scale }   // content peeking on each side of the notch when playing
     var collapsedWidth: CGFloat { notchWidth + collapsedSidePadding * 2 }
     var collapsedCornerRadius: CGFloat { 11 }  // roughly matches the notch's own corners
     var bottomExtension: CGFloat { 1 }         // extra px so the pill's bottom lines up with the notch
     var restHeight: CGFloat { notchHeight + bottomExtension }
+
+    /// Content sizes follow the scale but never outgrow the notch's height.
+    var artworkSize: CGFloat { min(notchHeight - 4, (notchHeight - 10) * scale) }
+    var ringSize: CGFloat { min(notchHeight - 2, (notchHeight - 6) * scale) }
+    func symbolSize(_ base: CGFloat) -> CGFloat { base * scale }
+
+    /// The low-battery alert grows out below the notch, like the iPhone's.
+    var alertWidth: CGFloat { min(canvasWidth - glowMargin * 2, max(380, notchWidth + 200)) }
+    var alertContentHeight: CGFloat { 66 }
+    var alertHeight: CGFloat { notchHeight + alertContentHeight }
+    var alertCornerRadius: CGFloat { 30 }
 
     /// The fixed canvas the panel uses. It's larger than the collapsed pop-out so
     /// there's always room around it; click-through keeps the extra area from

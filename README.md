@@ -27,6 +27,8 @@ if you want to use it for windows go to https://github.com/bisonactual/Nikos-Dyn
 - **Charging** — plug in and a ring fills up to your battery level.
 - **Lock screen** — a lock icon next to the notch while the screen is locked.
 - **Auto-updates** — only installs builds signed with the project's key. Menu bar icon → **Check for Updates…**
+- **Island size** — a slider in Settings, with a live preview of the island on your own wallpaper.
+- **Battery alerts** — the island grows into an iPhone-style "20% Battery" alert; set your own levels in Settings (e.g. 80 % while charging, 20 % on battery).
 - **Languages** — English, Norwegian and Hebrew (right-to-left), following macOS or picked in Settings.
 - **Settings** — menu bar icon → **Settings…** (⌘,): version and updates (how often and what time of day to check), launch at login, and each island feature on or off — with search.
 
@@ -39,7 +41,7 @@ cd builder
 cargo run
 ```
 
-Builds `Hevel.app` and offers to move it to Applications. Needs Swift (Xcode Command Line Tools) and Rust. For quick iteration there's `swift run`, and if u r a lazy bum, `./build.sh`. Run the tests with `./test.sh` (see [TESTING.md](TESTING.md)).
+Builds `Hevel.app` and offers to move it to Applications. Needs Swift (Xcode Command Line Tools) and Rust. For quick iteration there's `swift run`, and if u r a lazy bum, `./build.sh`. Run the tests with `./test.sh` (see [TESTING.md](TESTING.md)). Builds from `cargo run` are developer builds: Settings gets a **Developer** pane, and `./preview.sh music | charging | lowBattery | lock` (plus `next` / `previous`) shows an event without waiting for it (`./preview.sh hide` hides it again).
 
 ## How it works
 

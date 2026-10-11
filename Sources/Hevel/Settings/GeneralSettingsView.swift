@@ -25,17 +25,7 @@ struct GeneralSettingsView: View {
                 UpdateSettingsView(updater: updater, shown: shown)
             } else {
                 Section {
-                    Button(action: openSoftwareUpdate) {
-                        HStack {
-                            SettingsLabel(.checkForUpdates)
-                            Spacer()
-                            Image(systemName: "chevron.forward")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    SettingsLinkRow(item: .checkForUpdates, open: openSoftwareUpdate)
                 }
             }
 

@@ -4,12 +4,14 @@ import SwiftUI
 enum SettingsPage: Hashable {
     case pane(SettingsPane)
     case softwareUpdate
+    case batteryAlerts
 
     /// The sidebar pane that stays selected.
     var pane: SettingsPane {
         switch self {
         case .pane(let pane): pane
         case .softwareUpdate: .general
+        case .batteryAlerts: .island
         }
     }
 }
@@ -55,13 +57,15 @@ struct SettingsHistory {
 /// sidebar shows where you are.
 struct SettingsView: View {
     @ObservedObject var updater: Updater
+    /// Runs a Developer pane button.
+    let developer: (DeveloperMode.Command) -> Void
 
     @State private var history = SettingsHistory()
     @State private var query = ""
     @AppStorage(Preferences.appLanguageKey) private var language = AppLanguage.system
 
     private var matches: Set<SettingsItem> { Set(SettingsItem.matching(query)) }
-    private var panes: [SettingsPane] { SettingsItem.panes(matching: query) }
+    private var panes: [SettingsPane] { SettingsItem.panes(matching: query).filter(\.isAvailable) }
 
     private var selection: Binding<SettingsPane?> {
         Binding(get: { history.current.pane },
@@ -97,9 +101,15 @@ struct SettingsView: View {
                         case .softwareUpdate:
                             UpdateSettingsView(updater: updater, shown: matches)
                         case .pane(.island):
-                            IslandSettingsView(shown: matches)
+                            IslandSettingsView(shown: matches) {
+                                history.go(to: .batteryAlerts)
+                            }
+                        case .batteryAlerts:
+                            BatteryAlertsSettingsView()
                         case .pane(.language):
                             LanguageSettingsView(shown: matches)
+                        case .pane(.developer):
+                            DeveloperSettingsView(shown: matches, run: developer)
                         }
                     }
                     .formStyle(.grouped)

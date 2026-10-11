@@ -2,6 +2,8 @@
 #include <dispatch/dispatch.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <CoreFoundation/CoreFoundation.h>
 
 // Bridge to the private MediaRemote framework. Loaded inside an Apple-signed host
@@ -99,11 +101,15 @@ void mr_stream(void){
         CFRelease(n);
     }
 
-    // Heartbeat so elapsed stays in sync and nothing is missed.
+    // Heartbeat so elapsed stays in sync and nothing is missed. It also ends the
+    // helper once the app is gone (it's then re-parented to launchd), however the
+    // app ended — otherwise every crash or kill would leave a helper running.
+    static pid_t parent;
+    parent=getppid();
     static dispatch_source_t timer;
     timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,dispatch_get_main_queue());
     dispatch_source_set_timer(timer,DISPATCH_TIME_NOW,1LL*NSEC_PER_SEC,200LL*NSEC_PER_MSEC);
-    dispatch_source_set_event_handler(timer,^{ streamTick(); });
+    dispatch_source_set_event_handler(timer,^{ if(getppid()!=parent) exit(0); streamTick(); });
     dispatch_resume(timer);
     CFRunLoopRun();
 }

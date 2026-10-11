@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The panes in the settings sidebar.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, island, language
+    case general, island, language, developer
 
     var id: Self { self }
 
@@ -12,16 +12,21 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "General"
         case .island: "Island"
         case .language: "Language"
+        case .developer: "Developer"
         }
     }
 
     var title: String { tr(englishTitle) }
+
+    /// Developer builds only (`DeveloperMode`).
+    var isAvailable: Bool { self != .developer || DeveloperMode.isEnabled }
 
     var icon: SettingsIcon {
         switch self {
         case .general: SettingsIcon(symbol: "gearshape.fill", color: .gray)
         case .island: SettingsIcon(symbol: "capsule.fill", color: .black)
         case .language: SettingsIcon(symbol: "globe", color: .blue)
+        case .developer: SettingsIcon(symbol: "hammer.fill", color: .orange)
         }
     }
 }
@@ -32,7 +37,8 @@ enum SettingsItem: CaseIterable {
     case about, checkForUpdates, autoCheckForUpdates, installUpdatesAutomatically, skipSmallUpdates, updateFrequency
     case updateTimeOfDay
     case language, launchAtLogin
-    case hideWhilePlayerInFront, showInFullscreen, flipArtwork, chargingAnimation, lockScreenIcon
+    case islandSize, hideWhilePlayerInFront, showInFullscreen, flipArtwork, chargingAnimation, batteryAlerts, lockScreenIcon
+    case previewEvents
 
     var pane: SettingsPane {
         switch self {
@@ -41,7 +47,9 @@ enum SettingsItem: CaseIterable {
             .general
         case .language:
             .language
-        case .hideWhilePlayerInFront, .showInFullscreen, .flipArtwork, .chargingAnimation, .lockScreenIcon:
+        case .previewEvents:
+            .developer
+        case .islandSize, .hideWhilePlayerInFront, .showInFullscreen, .flipArtwork, .chargingAnimation, .batteryAlerts, .lockScreenIcon:
             .island
         }
     }
@@ -60,10 +68,13 @@ enum SettingsItem: CaseIterable {
         case .updateTimeOfDay: "Time of day"
         case .language: "Language"
         case .launchAtLogin: "Launch at login"
+        case .islandSize: "Island size"
         case .hideWhilePlayerInFront: "Hide while the playing app is in front"
         case .showInFullscreen: "Show in fullscreen apps"
         case .flipArtwork: "Flip the album art on track change"
         case .chargingAnimation: "Show the charging animation"
+        case .batteryAlerts: "Battery alerts"
+        case .previewEvents: "Preview events"
         case .lockScreenIcon: "Show a lock icon on the lock screen"
         }
     }
@@ -78,11 +89,14 @@ enum SettingsItem: CaseIterable {
         case .updateFrequency: ["update", "frequency", "schedule", "interval", "hourly", "daily", "weekly", "every"]
         case .updateTimeOfDay: ["update", "schedule", "morning", "afternoon", "evening", "time"]
         case .language: ["language", "translation", "english", "norwegian", "norsk", "hebrew", "עברית", "språk", "שפה"]
+        case .islandSize: ["size", "bigger", "smaller", "larger", "scale", "width", "preview", "wallpaper"]
         case .launchAtLogin: ["login items", "startup", "start", "boot", "open"]
         case .hideWhilePlayerInFront: ["hide", "player", "spotify", "music", "front", "focus", "app"]
         case .showInFullscreen: ["fullscreen", "full screen", "hide", "video", "game"]
         case .flipArtwork: ["flip", "album", "artwork", "cover", "track", "song", "animation", "next", "previous"]
         case .chargingAnimation: ["charging", "battery", "power", "ring", "plug", "animation"]
+        case .batteryAlerts: ["battery", "low", "high", "full", "alert", "warning", "notification", "charge", "percent", "low power mode"]
+        case .previewEvents: ["developer", "preview", "test", "debug", "trigger", "event"]
         case .lockScreenIcon: ["lock", "lock screen", "locked", "login"]
         }
     }
@@ -97,11 +111,14 @@ enum SettingsItem: CaseIterable {
         case .updateFrequency: "calendar"
         case .updateTimeOfDay: "clock.fill"
         case .language: "globe"
+        case .islandSize: "capsule.fill"
         case .launchAtLogin: "power"
         case .hideWhilePlayerInFront: "macwindow"
         case .showInFullscreen: "arrow.up.left.and.arrow.down.right"
         case .flipArtwork: "music.note"
         case .chargingAnimation: "bolt.fill"
+        case .batteryAlerts: "battery.75percent"
+        case .previewEvents: "play.rectangle.fill"
         case .lockScreenIcon: "lock.fill"
         }
     }
@@ -115,9 +132,12 @@ enum SettingsItem: CaseIterable {
         case .updateFrequency: .red
         case .updateTimeOfDay: .orange
         case .hideWhilePlayerInFront: .blue
+        case .islandSize: .black
         case .showInFullscreen: .teal
         case .flipArtwork: .pink
         case .chargingAnimation: .green
+        case .batteryAlerts: .green
+        case .previewEvents: .orange
         case .lockScreenIcon: .indigo
         }
     }
@@ -165,5 +185,26 @@ struct SettingsLabel: View {
         } icon: {
             SettingsIcon(symbol: item.symbol, color: item.color)
         }
+    }
+}
+
+/// A row that opens a page inside a pane ("Software Update ›"), like System Settings.
+struct SettingsLinkRow: View {
+    let item: SettingsItem
+    var subtitle: String?
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack {
+                SettingsLabel(item, subtitle: subtitle)
+                Spacer()
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

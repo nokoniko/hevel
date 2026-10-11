@@ -34,14 +34,17 @@ final class NotchController {
     /// The popped-out notch rect in global screen coords, recomputed only when the
     /// window is positioned — so the hot mouse-move path is just a `contains` check.
     var poppedNotchRect: CGRect = .zero
+    /// Screen rect of the low-battery alert, for click-through while it shows.
+    var alertRect: CGRect = .zero
 
     let power = PowerMonitor()
     var chargingClearWork: DispatchWorkItem?
+    var batteryAlertClearWork: DispatchWorkItem?
     var cancellables = Set<AnyCancellable>()
 
     init(model: NowPlayingModel) {
         self.model = model
-        self.state = IslandState(metrics: NotchController.metrics(for: Self.targetScreen()))
+        self.state = IslandState(metrics: Self.currentMetrics())
         buildWindow()
         startMouseTracking()
         observeScreenChanges()

@@ -40,6 +40,12 @@ final class NowPlayingModel: ObservableObject {
     private var trackKeyCurrent: String?
     private var trackKeyPrevious: String?
 
+    /// Developer builds: a made-up track is showing instead of the real one, which
+    /// is kept aside (`heldBack`) and restored when the preview ends.
+    private(set) var isPreviewing = false
+    private var previewTrack = 0
+    private var heldBack: NowPlayingInfo?
+
     /// True for a few seconds after pausing, so the pop-out can shrink + dim
     /// before it disappears.
     @Published var pausedLingering = false
@@ -76,7 +82,7 @@ final class NowPlayingModel: ObservableObject {
             let color = Self.accentColor(from: image)   // compute off-main (dataTask completion)
             let thumb = Self.downsample(image, to: 64)
             Task { @MainActor in
-                guard let self, self.lastArtworkKey == urlString else { return }
+                guard let self, !self.isPreviewing, self.lastArtworkKey == urlString else { return }
                 self.artwork = thumb
                 self.accent = color
             }
@@ -91,7 +97,7 @@ final class NowPlayingModel: ObservableObject {
             let color = full.map { Self.accentColor(from: $0) } ?? .white   // compute off-main
             let thumb = full.map { Self.downsample($0, to: 64) }
             Task { @MainActor in
-                guard let self, self.title == token else { return }
+                guard let self, !self.isPreviewing, self.title == token else { return }
                 self.artwork = thumb
                 self.accent = color
             }
@@ -119,7 +125,7 @@ final class NowPlayingModel: ObservableObject {
                     let info = MediaFallback.fetch()
                     Task { @MainActor [weak self] in
                         guard let self else { return }
-                        if let info { self.apply(info) } else { self.clear() }
+                        self.receive(info)
                     }
                 }
             }
@@ -152,7 +158,7 @@ final class NowPlayingModel: ObservableObject {
             // without touching AppleScript — otherwise we'd script Spotify/Music every
             // second, 24/7, just because those apps happen to be open.
             if sysInfo == nil && !self.hasMedia {
-                self.clear()
+                self.receive(nil)
                 return
             }
             // Something is (or was) playing: reconcile with the instant Spotify/Music
@@ -164,7 +170,7 @@ final class NowPlayingModel: ObservableObject {
                 let chosen = Self.reconcile(system: sysInfo, app: app)
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    if let chosen { self.apply(chosen) } else { self.clear() }
+                    self.receive(chosen)
                 }
             }
         }
@@ -204,6 +210,16 @@ final class NowPlayingModel: ObservableObject {
         if wasPlaying && !isPlaying && !title.isEmpty && lingers { return .start }
         if isPlaying || (wasPlaying && !isPlaying) { return .cancel }
         return .unchanged
+    }
+
+    /// A real update from the stream or the fallback poll: shown, unless a preview is
+    /// up — then it waits until the preview ends.
+    private func receive(_ info: NowPlayingInfo?) {
+        guard !isPreviewing else {
+            heldBack = info
+            return
+        }
+        if let info { apply(info) } else { clear() }
     }
 
     private func apply(_ info: NowPlayingInfo) {
@@ -277,6 +293,76 @@ final class NowPlayingModel: ObservableObject {
         currentSource = nil
         playingPID = nil
         cancelPauseLinger()
+    }
+
+    // MARK: Preview (developer builds)
+
+    /// Shows a made-up track, playing, as if a player had started.
+    func startPreview() {
+        guard !isPreviewing else { return }
+        heldBack = hasMedia ? currentInfo : nil
+        isPreviewing = true
+        previewTrack = 0
+        clear()
+        apply(Self.previewInfo(previewTrack))
+    }
+
+    /// The next or previous made-up track, so the cover flips that way.
+    func stepPreview(forward: Bool) {
+        if !isPreviewing { startPreview() }
+        previewTrack += forward ? 1 : -1
+        apply(Self.previewInfo(previewTrack))
+        flipForward = forward
+    }
+
+    /// Back to what's really playing (or nothing).
+    func stopPreview() {
+        guard isPreviewing else { return }
+        isPreviewing = false
+        clear()
+        trackKeyCurrent = nil
+        trackKeyPrevious = nil
+        if let heldBack { apply(heldBack) }
+        heldBack = nil
+    }
+
+    /// What's showing now, to put back after a preview.
+    private var currentInfo: NowPlayingInfo {
+        NowPlayingInfo(title: title, artist: artist, album: album, artwork: artwork,
+                       duration: duration, elapsed: elapsed, isPlaying: isPlaying,
+                       sourceApp: currentSource, pid: playingPID)
+    }
+
+    nonisolated static func previewInfo(_ track: Int) -> NowPlayingInfo {
+        let hues: [CGFloat] = [0.58, 0.92, 0.08, 0.36, 0.75]
+        let hue = hues[((track % hues.count) + hues.count) % hues.count]
+        return NowPlayingInfo(title: "Preview Track \(track + 1)", artist: "Hevel", album: "Preview \(track)",
+                              artwork: previewArtwork(hue: hue), duration: 210, elapsed: 42,
+                              isPlaying: true, sourceApp: "preview", pid: nil)
+    }
+
+    /// A small two-tone cover with a music note, different for each made-up track.
+    nonisolated static func previewArtwork(hue: CGFloat) -> NSImage {
+        NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
+            let top = NSColor(hue: hue, saturation: 0.75, brightness: 0.95, alpha: 1)
+            let bottom = NSColor(hue: hue + 0.08, saturation: 0.85, brightness: 0.55, alpha: 1)
+            NSGradient(starting: top, ending: bottom)?.draw(in: rect, angle: -90)
+            let note = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 28, weight: .bold))
+            note?.isTemplate = true
+            if let note {
+                let tinted = NSImage(size: note.size, flipped: false) { r in
+                    note.draw(in: r)
+                    NSColor.white.withAlphaComponent(0.9).set()
+                    r.fill(using: .sourceAtop)
+                    return true
+                }
+                let size = tinted.size
+                tinted.draw(in: NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2,
+                                       width: size.width, height: size.height))
+            }
+            return true
+        }
     }
 
     // MARK: Controls

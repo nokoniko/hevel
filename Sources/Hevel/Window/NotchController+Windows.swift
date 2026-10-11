@@ -61,7 +61,7 @@ extension NotchController {
         panel.canBecomeVisibleWithoutLogin = true
         panel.collectionBehavior = [.stationary, .ignoresCycle, .fullScreenAuxiliary]
 
-        let hosting = NSHostingView(rootView: LockIslandView(metrics: state.metrics))
+        let hosting = NSHostingView(rootView: LockIslandView(state: state))
         hosting.frame = NSRect(x: 0, y: 0, width: size.width, height: size.height)
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting

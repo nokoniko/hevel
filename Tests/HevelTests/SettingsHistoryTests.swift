@@ -47,7 +47,8 @@ struct SettingsHistoryTests {
 		#expect(!history.canGoBack)
 	}
 
-	@Test func softwareUpdateBelongsToGeneral() {
+	@Test func subpagesBelongToTheirPane() {
 		#expect(SettingsPage.softwareUpdate.pane == .general)
+		#expect(SettingsPage.batteryAlerts.pane == .island)
 	}
 }

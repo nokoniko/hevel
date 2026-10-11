@@ -6,21 +6,19 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let updater: Updater
+    private let developer: (DeveloperMode.Command) -> Void
     private var window: NSWindow?
 
     var isOpen: Bool { window?.isVisible == true }
 
-    init(updater: Updater) {
+    init(updater: Updater, developer: @escaping (DeveloperMode.Command) -> Void) {
         self.updater = updater
+        self.developer = developer
     }
 
     func show() {
         if window == nil {
-            let view = SettingsView(updater: updater)
-            let hosting = NSHostingController(rootView: view)
-            // Let SwiftUI drive the toolbar (sidebar layout), like System Settings.
-            hosting.sceneBridgingOptions = [.toolbars]
-            let window = NSWindow(contentViewController: hosting)
+            let window = NSWindow(contentViewController: makeContent())
             window.title = "Hevel"
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.toolbarStyle = .unified
@@ -32,6 +30,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             self.window = window
         }
         guard let window else { return }
+        if window.contentViewController == nil { window.contentViewController = makeContent() }
         let alreadyOpen = window.isVisible
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
@@ -43,6 +42,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // Centered after it's laid out (toolbar included), still within this run-loop
         // turn, so it never visibly jumps.
         if !alreadyOpen { center(window) }
+        // Becoming a regular app takes effect a moment later, and macOS won't make an
+        // accessory app active — so activate again on the next turn. Without it the
+        // window is in front but the first click only activates it.
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func makeContent() -> NSViewController {
+        let hosting = NSHostingController(rootView: SettingsView(updater: updater, developer: developer))
+        // Let SwiftUI drive the toolbar (sidebar layout), like System Settings.
+        hosting.sceneBridgingOptions = [.toolbars]
+        return hosting
     }
 
     /// Dead center of the screen the pointer is on, i.e. where the user is looking.
@@ -76,5 +89,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         // Back to a menu-bar-only agent: no Dock icon.
         NSApp.setActivationPolicy(.accessory)
+        // Drop the SwiftUI content — with its wallpaper thumbnail and island preview —
+        // so a closed settings window costs next to nothing; it's rebuilt on the next
+        // open. (The window itself stays: AppKit keeps closed windows around anyway.)
+        DispatchQueue.main.async { [weak self] in self?.window?.contentViewController = nil }
     }
 }
