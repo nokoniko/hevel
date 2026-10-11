@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Hevel
 
@@ -141,5 +142,28 @@ struct BrowserScriptParsingTests {
 	@Test(arguments: ["", "1", "0|||Video|||Channel", "1||||||Channel", "garbage"])
 	func rejectsPausedUntitledOrBrokenReplies(raw: String) {
 		#expect(MediaFallback.parseBrowserOutput(raw, browser: "Google Chrome") == nil)
+	}
+}
+
+struct StreamRepeatTests {
+	let line = Data(#"{"title":"Song","isPlaying":false}"#.utf8)
+	let start = Date(timeIntervalSince1970: 1_000)
+
+	@Test func aRepeatedLineIsSkipped() {
+		#expect(!SystemNowPlaying.shouldDeliver(line, previous: line, lastDelivered: start, now: start.addingTimeInterval(1)))
+	}
+
+	@Test func aChangedLineGoesThrough() {
+		let playing = Data(#"{"title":"Song","isPlaying":true}"#.utf8)
+		#expect(SystemNowPlaying.shouldDeliver(playing, previous: line, lastDelivered: start, now: start.addingTimeInterval(1)))
+	}
+
+	@Test func aRepeatStillGoesThroughNowAndThen() {
+		let later = start.addingTimeInterval(SystemNowPlaying.repeatInterval)
+		#expect(SystemNowPlaying.shouldDeliver(line, previous: line, lastDelivered: start, now: later))
+	}
+
+	@Test func theFirstLineGoesThrough() {
+		#expect(SystemNowPlaying.shouldDeliver(line, previous: Data(), lastDelivered: .distantPast, now: start))
 	}
 }

@@ -32,6 +32,13 @@ final class SystemNowPlaying {
 
     private var streamProcess: Process?
     private var buffer = Data()
+    private var lastLine = Data()
+    private var lastDelivered = Date.distantPast
+
+    /// A paused track repeats the same line every second; such repeats are skipped,
+    /// but one still goes through this often, so the model re-checks Spotify/Music now
+    /// and then even if MediaRemote misses a change.
+    static let repeatInterval: TimeInterval = 10
     private var onUpdate: ((NowPlayingInfo?) -> Void)?
     private var stopped = false
 
@@ -75,11 +82,20 @@ final class SystemNowPlaying {
     private func consume(_ data: Data) {
         buffer.append(data)
         while let nl = buffer.firstIndex(of: 0x0A) {
-            let line = buffer[buffer.startIndex..<nl]
+            let line = Data(buffer[buffer.startIndex..<nl])
             buffer.removeSubrange(buffer.startIndex...nl)
-            onUpdate?(Self.parse(Data(line)))
+            let now = Date()
+            guard Self.shouldDeliver(line, previous: lastLine, lastDelivered: lastDelivered, now: now) else { continue }
+            lastLine = line
+            lastDelivered = now
+            onUpdate?(Self.parse(line))
         }
         if buffer.count > 8192 { buffer.removeAll(keepingCapacity: true) } // safety
+    }
+
+    /// A new line, or the same one again once `repeatInterval` has passed.
+    static func shouldDeliver(_ line: Data, previous: Data, lastDelivered: Date, now: Date) -> Bool {
+        line != previous || now.timeIntervalSince(lastDelivered) >= repeatInterval
     }
 
     // MARK: One-off calls

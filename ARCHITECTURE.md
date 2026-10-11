@@ -232,7 +232,13 @@ functions set up on `dispatch_get_main_queue()` and call `CFRunLoopRun()`.
 `SystemNowPlaying` (Swift side):
 - `start(onUpdate:)` spawns **one long-lived** `python3 -c "...mr_stream()"`
   process and parses stdout line-by-line into `Info` (sourceApp = `"system"`).
-  Respawns on unexpected termination.
+  Respawns on unexpected termination. A line identical to the previous one (a
+  paused track, every second) is skipped, except once per `repeatInterval` (10 s)
+  — each delivered line makes the model run the Spotify/Music AppleScript
+  reconcile, so this is what keeps a paused track from scripting them every second.
+  Changes Spotify/Music make on their own are still picked up at once:
+  `NowPlayingModel` listens for `com.spotify.client.PlaybackStateChanged` and
+  `com.apple.Music.playerInfo` and reconciles with the last stream snapshot.
 - `fetchArtwork()` is a one-off `python3` invocation.
 - **RAM lesson:** an earlier design spawned a python3 *per second*. That leaked
   zombie processes and pushed RAM to ~76 MB. The single persistent streamer fixed

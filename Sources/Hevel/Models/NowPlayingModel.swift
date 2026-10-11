@@ -39,6 +39,9 @@ final class NowPlayingModel: ObservableObject {
     private var pauseLingerWork: DispatchWorkItem?
     private var trackKeyCurrent: String?
     private var trackKeyPrevious: String?
+    /// The last snapshot from the stream, to reconcile again when Spotify/Music
+    /// announce a change of their own.
+    private var lastSystemInfo: NowPlayingInfo?
 
     /// Developer builds: a made-up track is showing instead of the real one, which
     /// is kept aside (`heldBack`) and restored when the preview ends.
@@ -117,6 +120,19 @@ final class NowPlayingModel: ObservableObject {
             SystemNowPlaying.shared.start { [weak self] info in
                 self?.handleStreamUpdate(info)
             }
+            // The stream skips repeated lines (a paused track), so whatever Spotify or
+            // Music change on their own — play/pause, track — is picked up from their
+            // own announcements right away instead of waiting for the next line.
+            for name in ["com.spotify.client.PlaybackStateChanged", "com.apple.Music.playerInfo"] {
+                DistributedNotificationCenter.default().addObserver(
+                    forName: .init(name), object: nil, queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.handleStreamUpdate(self.lastSystemInfo)
+                    }
+                }
+            }
         } else {
             // No helper (e.g. no python3): fall back to polling AppleScript sources.
             pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -154,6 +170,7 @@ final class NowPlayingModel: ObservableObject {
     private func handleStreamUpdate(_ sysInfo: NowPlayingInfo?) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            self.lastSystemInfo = sysInfo
             // True idle: nothing in the system now-playing and nothing shown. Clear
             // without touching AppleScript — otherwise we'd script Spotify/Music every
             // second, 24/7, just because those apps happen to be open.
